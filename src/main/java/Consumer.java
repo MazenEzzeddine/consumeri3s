@@ -22,9 +22,7 @@ public class Consumer {
     static double eventsNonViolating = 0;
     static double totalEvents = 0;
     static float maxConsumptionRatePerConsumer = 0.0f;
-    static float ConsumptionRatePerConsumerInThisPoll = 0.0f;
-    static float averageRatePerConsumerForGrpc = 0.0f;
-    static long pollsSoFar = 0;
+
 
    static  ArrayList<TopicPartition> tps;
     static KafkaProducer<String, Customer> producer;
@@ -38,7 +36,6 @@ public class Consumer {
     public static void main(String[] args)
             throws IOException, URISyntaxException, InterruptedException {
 
-        log.info("Hello Ashwini");
 
         KafkaConsumerConfig config = KafkaConsumerConfig.fromEnv();
         log.info(KafkaConsumerConfig.class.getName() + ": {}", config.toString());
@@ -47,11 +44,11 @@ public class Consumer {
         props.put(ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG,
                 StickyAssignor.class.getName());
 
-        boolean commit = !Boolean.parseBoolean(config.getEnableAutoCommit());
         consumer = new KafkaConsumer<String, Customer>(props);
         consumer.subscribe(Collections.singletonList(config.getTopic()));
         log.info("Subscribed to topic {}", config.getTopic());
 
+        PrometheusUtils.initPrometheus();
         addShutDownHook();
         tps = new ArrayList<>();
         tps.add(new TopicPartition("testtopic1", 0));
@@ -62,7 +59,6 @@ public class Consumer {
 
         try {
             while (true) {
-                Long timeBeforePolling = System.currentTimeMillis();
                 ConsumerRecords<String, Customer> records = consumer.poll
                         (Duration.ofMillis(Long.MAX_VALUE));
 
@@ -79,6 +75,8 @@ public class Consumer {
                             //TODO sleep per record or per batch
                             try {
                                 Thread.sleep(Long.parseLong(config.getSleep()));
+                                PrometheusUtils.latencygaugemeasure
+                                        .setDuration(System.currentTimeMillis() - record.timestamp());
 
                                 //function to do object detection...
 
@@ -87,24 +85,7 @@ public class Consumer {
                             }
                         }
                    }
-
-
                     consumer.commitSync();
-
-                    log.info("In this poll, received {} events", records.count());
-                    Long timeAfterPollingProcessingAndCommit = System.currentTimeMillis();
-                    ConsumptionRatePerConsumerInThisPoll = ((float) records.count() /
-                            (float) (timeAfterPollingProcessingAndCommit - timeBeforePolling)) * 1000.0f;
-                    pollsSoFar += 1;
-                    averageRatePerConsumerForGrpc = averageRatePerConsumerForGrpc +
-                            (ConsumptionRatePerConsumerInThisPoll -
-                                    averageRatePerConsumerForGrpc) / (float) (pollsSoFar);
-
-                    if (maxConsumptionRatePerConsumer < ConsumptionRatePerConsumerInThisPoll) {
-                        maxConsumptionRatePerConsumer = ConsumptionRatePerConsumerInThisPoll;
-                    }
-                    log.info("ConsumptionRatePerConsumerInThisPoll in this poll {}",
-                            ConsumptionRatePerConsumerInThisPoll);
                     log.info("maxConsumptionRatePerConsumer {}", maxConsumptionRatePerConsumer);
                     double percentViolating = (double) eventsViolating / (double) totalEvents;
                     double percentNonViolating = (double) eventsNonViolating / (double) totalEvents;
