@@ -57,26 +57,39 @@ public class Consumer {
         tps.add(new TopicPartition("testtopic1", 3));
         tps.add(new TopicPartition("testtopic1", 4));
 
+        double max = 0;
+
         try {
             while (true) {
                 ConsumerRecords<String, Customer> records = consumer.poll
                         (Duration.ofMillis(Long.MAX_VALUE));
 
+               max = 0;
+
                 if (records.count() != 0) {
+                    log.info("received {}", records.count());
                     for (TopicPartition tp : tps) {
 
                         for (ConsumerRecord<String, Customer> record : records.records(tp)) {
                             totalEvents++;
-                            if (System.currentTimeMillis() - record.timestamp() <= 5000) {
-                                eventsNonViolating++;
-                            } else {
-                                eventsViolating++;
-                            }
+
+
                             //TODO sleep per record or per batch
                             try {
                                 Thread.sleep(Long.parseLong(config.getSleep()));
+
+                                if (System.currentTimeMillis() - record.timestamp() <= 500) {
+                                    eventsNonViolating++;
+                                } else {
+                                    eventsViolating++;
+                                }
                                 PrometheusUtils.latencygaugemeasure
                                         .setDuration(System.currentTimeMillis() - record.timestamp());
+
+                                log.info(" latency is {}", System.currentTimeMillis() - record.timestamp());
+                                if(System.currentTimeMillis() - record.timestamp() > max){
+                                    max = System.currentTimeMillis() - record.timestamp();
+                                }
 
                                 //function to do object detection...
 
@@ -84,7 +97,13 @@ public class Consumer {
                                 e.printStackTrace();
                             }
                         }
+
+
+
                    }
+                    PrometheusUtils.maxlatencygaugemeasure
+                            .setDuration(max);
+                    log.info("maximum execution time is {}", max );
                     consumer.commitSync();
                     log.info("maxConsumptionRatePerConsumer {}", maxConsumptionRatePerConsumer);
                     double percentViolating = (double) eventsViolating / (double) totalEvents;

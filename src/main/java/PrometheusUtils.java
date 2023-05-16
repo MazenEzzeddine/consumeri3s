@@ -14,6 +14,10 @@ public class PrometheusUtils {
     public static Gauge latencygauge;
 
 
+    public static TimeMeasure maxlatencygaugemeasure;
+    public static Gauge maxlatencygauge;
+
+
 
 
     public static void initPrometheus() {
@@ -34,6 +38,12 @@ public class PrometheusUtils {
 
         latencygaugemeasure = new TimeMeasure(0.0);
         latencygauge = Gauge.builder("latencygauge",  latencygaugemeasure, TimeMeasure::getDuration)
+                .register(prometheusRegistry);
+
+
+        maxlatencygaugemeasure = new TimeMeasure(0.0);
+        maxlatencygauge = Gauge.builder("maxlatencygauge",  maxlatencygaugemeasure,
+                        TimeMeasure::getDuration)
                 .register(prometheusRegistry);
 
 
