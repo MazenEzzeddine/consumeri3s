@@ -26,6 +26,7 @@ public class Consumer {
 
    static  ArrayList<TopicPartition> tps;
     static KafkaProducer<String, Customer> producer;
+    static float latency;
 
 
     public Consumer() throws
@@ -50,6 +51,7 @@ public class Consumer {
 
         PrometheusUtils.initPrometheus();
         addShutDownHook();
+        startServer();
         tps = new ArrayList<>();
         tps.add(new TopicPartition("testtopic1", 0));
         tps.add(new TopicPartition("testtopic1", 1));
@@ -86,6 +88,8 @@ public class Consumer {
                                 PrometheusUtils.latencygaugemeasure
                                         .setDuration(System.currentTimeMillis() - record.timestamp());
 
+
+
                                 log.info(" latency is {}", System.currentTimeMillis() - record.timestamp());
                                 if(System.currentTimeMillis() - record.timestamp() > max){
                                     max = System.currentTimeMillis() - record.timestamp();
@@ -101,6 +105,8 @@ public class Consumer {
 
 
                    }
+                    latency = (float)max;
+
                     PrometheusUtils.maxlatencygaugemeasure
                             .setDuration(max);
                     log.info("maximum execution time is {}", max );
@@ -137,5 +143,12 @@ public class Consumer {
                 }
             }
         });
+    }
+
+
+
+    private static void startServer() {
+        Thread server = new Thread  (new ServerThread());
+        server.start();
     }
 }
