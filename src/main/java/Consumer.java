@@ -1,6 +1,5 @@
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
 import org.apache.logging.log4j.LogManager;
@@ -9,6 +8,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Properties;
@@ -24,7 +24,8 @@ public class Consumer {
     static float maxConsumptionRatePerConsumer = 0.0f;
 
 
-   static  ArrayList<TopicPartition> tps;
+
+    static ArrayList<TopicPartition> tps;
     static KafkaProducer<String, Customer> producer;
     static float latency;
 
@@ -46,7 +47,7 @@ public class Consumer {
                 StickyAssignor.class.getName());
 
         consumer = new KafkaConsumer<String, Customer>(props);
-        consumer.subscribe(Collections.singletonList(config.getTopic()));
+        consumer.subscribe(Collections.singletonList(config.getTopic()), new RebalanceListener());
         log.info("Subscribed to topic {}", config.getTopic());
 
         PrometheusUtils.initPrometheus();
@@ -61,25 +62,22 @@ public class Consumer {
 
         double max = 0;
 
+        Instant sampletime = Instant.now();
+
         try {
             while (true) {
                 ConsumerRecords<String, Customer> records = consumer.poll
                         (Duration.ofMillis(Long.MAX_VALUE));
-
-               max = 0;
-
+                //max = 0;
                 if (records.count() != 0) {
                     log.info("received {}", records.count());
                     for (TopicPartition tp : tps) {
 
                         for (ConsumerRecord<String, Customer> record : records.records(tp)) {
                             totalEvents++;
-
-
                             //TODO sleep per record or per batch
                             try {
                                 Thread.sleep(Long.parseLong(config.getSleep()));
-
                                 if (System.currentTimeMillis() - record.timestamp() <= 500) {
                                     eventsNonViolating++;
                                 } else {
@@ -87,34 +85,32 @@ public class Consumer {
                                 }
                                 PrometheusUtils.latencygaugemeasure
                                         .setDuration(System.currentTimeMillis() - record.timestamp());
-
-
-
                                 log.info(" latency is {}", System.currentTimeMillis() - record.timestamp());
-                                if(System.currentTimeMillis() - record.timestamp() > max){
+                                if (System.currentTimeMillis() - record.timestamp() > max) {
                                     max = System.currentTimeMillis() - record.timestamp();
                                 }
-
                                 //function to do object detection...
-
                             } catch (InterruptedException e) {
                                 e.printStackTrace();
                             }
                         }
-
-
-
-                   }
-                    latency = (float)max;
-
-                    PrometheusUtils.maxlatencygaugemeasure
-                            .setDuration(max);
-                    log.info("maximum execution time is {}", max );
+                    }
+                    if (Duration.between(sampletime, Instant.now()).getSeconds() >= 1) {
+                        PrometheusUtils.maxlatencygaugemeasure
+                                .setDuration(max);
+                        log.info("latencyguage {}", max);
+                        latency = (float) max;
+                        max = 0;
+                        sampletime = Instant.now();
+                    }
+                    log.info("maximum execution time is {}", max);
                     consumer.commitSync();
                     log.info("maxConsumptionRatePerConsumer {}", maxConsumptionRatePerConsumer);
-                    double percentViolating = (double) eventsViolating / (double) totalEvents;
-                    double percentNonViolating = (double) eventsNonViolating / (double) totalEvents;
+                    double percentViolating = eventsViolating / totalEvents;
+                    double percentNonViolating = eventsNonViolating / totalEvents;
                     log.info("Percent violating so far {}", percentViolating);
+                    log.info("Events Non Violating {}", eventsNonViolating);
+                    log.info("Total Events {}", totalEvents);
                     log.info("Percent non violating so far {}", percentNonViolating);
                     log.info("total events {}", totalEvents);
                 }
@@ -127,8 +123,6 @@ public class Consumer {
             log.info("Closed consumer and we are done");
         }
     }
-
-
 
 
     private static void addShutDownHook() {
@@ -146,9 +140,8 @@ public class Consumer {
     }
 
 
-
     private static void startServer() {
-        Thread server = new Thread  (new ServerThread());
+        Thread server = new Thread(new ServerThread());
         server.start();
     }
 }
