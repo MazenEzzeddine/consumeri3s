@@ -1,5 +1,6 @@
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
 import org.apache.logging.log4j.LogManager;
@@ -47,12 +48,14 @@ public class Consumer {
                 StickyAssignor.class.getName());
 
         consumer = new KafkaConsumer<String, Customer>(props);
-        consumer.subscribe(Collections.singletonList(config.getTopic()), new RebalanceListener());
+        consumer.subscribe(Collections.singletonList(config.getTopic())/*, new RebalanceListener()*/);
+        producer = Producer.producerFactory();
+
         log.info("Subscribed to topic {}", config.getTopic());
 
-        PrometheusUtils.initPrometheus();
+       // PrometheusUtils.initPrometheus();
         addShutDownHook();
-        startServer();
+        //startServer();
         tps = new ArrayList<>();
         tps.add(new TopicPartition("testtopic1", 0));
         tps.add(new TopicPartition("testtopic1", 1));
@@ -60,9 +63,11 @@ public class Consumer {
         tps.add(new TopicPartition("testtopic1", 3));
         tps.add(new TopicPartition("testtopic1", 4));
 
-        double max = 0;
 
-        Instant sampletime = Instant.now();
+
+
+
+        int percentTopic2 = 1;
 
         try {
             while (true) {
@@ -78,32 +83,27 @@ public class Consumer {
                             //TODO sleep per record or per batch
                             try {
                                 Thread.sleep(Long.parseLong(config.getSleep()));
-                                if (System.currentTimeMillis() - record.timestamp() <= 500) {
+                                if (System.currentTimeMillis() - record.timestamp() <= 500 /*1500*/) {
                                     eventsNonViolating++;
                                 } else {
                                     eventsViolating++;
                                 }
-                                PrometheusUtils.latencygaugemeasure
-                                        .setDuration(System.currentTimeMillis() - record.timestamp());
+
+                             /*   producer.send(new ProducerRecord<String, Customer>
+                                        ("testtopic22",
+                                                tp.partition(), record.timestamp(),
+                                                record.key(), record.value()));*/
+
+                               /* PrometheusUtils.latencygaugemeasure
+                                        .setDuration(System.currentTimeMillis() - record.timestamp());*/
                                 log.info(" latency is {}", System.currentTimeMillis() - record.timestamp());
-                                if (System.currentTimeMillis() - record.timestamp() > max) {
-                                    max = System.currentTimeMillis() - record.timestamp();
-                                }
+
                                 //function to do object detection...
                             } catch (InterruptedException e) {
                                 e.printStackTrace();
                             }
                         }
                     }
-                    if (Duration.between(sampletime, Instant.now()).getSeconds() >= 1) {
-                        PrometheusUtils.maxlatencygaugemeasure
-                                .setDuration(max);
-                        log.info("latencyguage {}", max);
-                        latency = (float) max;
-                        max = 0;
-                        sampletime = Instant.now();
-                    }
-                    log.info("maximum execution time is {}", max);
                     consumer.commitSync();
                     log.info("maxConsumptionRatePerConsumer {}", maxConsumptionRatePerConsumer);
                     double percentViolating = eventsViolating / totalEvents;

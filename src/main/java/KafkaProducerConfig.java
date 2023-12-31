@@ -42,7 +42,7 @@ public class KafkaProducerConfig {
         String acks = System.getenv().getOrDefault("PRODUCER_ACKS", "1");
         //String headers = System.getenv("HEADERS");
         String additionalConfig = System.getenv().getOrDefault("ADDITIONAL_CONFIG", "");
-        return new KafkaProducerConfig(bootstrapServers, "testtopic2", delay, messageCount, message,
+        return new KafkaProducerConfig(bootstrapServers, "testtopic22", delay, messageCount, message,
                 acks, additionalConfig);
     }
 
@@ -62,7 +62,7 @@ public class KafkaProducerConfig {
                CustomerSerializer.class.getName());
 
 
-        props.put(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, Collections.singletonList(CounterInterceptor.class));
+        //props.put(ProducerConfig.INTERCEPTOR_CLASSES_CONFIG, Collections.singletonList(CounterInterceptor.class));
         //props.put(ProducerConfig., "org.apache.kafka.common.serialization.StringSerializer");
         if (!config.getAdditionalConfig().isEmpty()) {
             StringTokenizer tok =
