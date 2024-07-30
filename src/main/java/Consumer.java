@@ -1,3 +1,4 @@
+import io.micrometer.core.instrument.binder.kafka.KafkaClientMetrics;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -22,9 +23,7 @@ public class Consumer {
     static double eventsNonViolating = 0;
     static double totalEvents = 0;
     static float maxConsumptionRatePerConsumer = 0.0f;
-
-
-   static  ArrayList<TopicPartition> tps;
+    static  ArrayList<TopicPartition> tps;
     static KafkaProducer<String, Customer> producer;
     static float latency;
 
@@ -46,11 +45,15 @@ public class Consumer {
                 StickyAssignor.class.getName());
 
         consumer = new KafkaConsumer<String, Customer>(props);
+
+        KafkaClientMetrics consumerKafkaMetrics = new KafkaClientMetrics(consumer);
         consumer.subscribe(Collections.singletonList(config.getTopic()));
         log.info("Subscribed to topic {}", config.getTopic());
 
         PrometheusUtils.initPrometheus();
         addShutDownHook();
+        consumerKafkaMetrics.bindTo(PrometheusUtils.prometheusRegistry);
+
         startServer();
         tps = new ArrayList<>();
         tps.add(new TopicPartition("testtopic1", 0));
@@ -87,8 +90,6 @@ public class Consumer {
                                 }
                                 PrometheusUtils.latencygaugemeasure
                                         .setDuration(System.currentTimeMillis() - record.timestamp());
-
-
 
                                 log.info(" latency is {}", System.currentTimeMillis() - record.timestamp());
                                 if(System.currentTimeMillis() - record.timestamp() > max){
